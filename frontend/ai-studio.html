@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Studio — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="ai">
+
+<div class="page-shell" style="max-width:720px;">
+  <h2>🤖 AI Creation Studio</h2>
+  <p>Every result is generated through a swappable AI provider (mock offline provider by default). Nothing is published automatically — you always approve first.</p>
+
+  <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;">
+    <span class="chip active" data-tool="text">✍️ AI Text</span>
+    <span class="chip" data-tool="image">🎨 AI Image</span>
+    <span class="chip" data-tool="sticker">✨ AI Sticker</span>
+    <span class="chip" data-tool="meme">😂 AI Meme</span>
+    <span class="chip" data-tool="assistant">🧑‍💻 Campus Assistant</span>
+  </div>
+
+  <div class="card">
+    <div id="textTool">
+      <label>What do you want to write about?</label>
+      <input type="text" id="textPrompt" placeholder="college fest tomorrow">
+      <label>Style</label>
+      <select id="textStyle">
+        <option value="funny">Funny</option><option value="casual">Casual</option><option value="professional">Professional</option>
+        <option value="genz">Gen-Z</option><option value="short">Short</option><option value="emotional">Emotional</option>
+      </select>
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" id="genTextBtn">Generate</button>
+    </div>
+
+    <div id="imageTool" style="display:none;">
+      <label>Describe the image</label>
+      <input type="text" id="imagePrompt" placeholder="A futuristic college fest poster">
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" id="genImageBtn">Generate Image</button>
+    </div>
+
+    <div id="stickerTool" style="display:none;">
+      <label>Describe the sticker</label>
+      <input type="text" id="stickerPrompt" placeholder="Funny sleepy student before exam">
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" id="genStickerBtn">Generate Sticker</button>
+    </div>
+
+    <div id="memeTool" style="display:none;">
+      <label>Meme idea</label>
+      <input type="text" id="memePrompt" placeholder="When the professor extends the deadline">
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" id="genMemeBtn">Generate Meme Text</button>
+    </div>
+
+    <div id="assistantTool" style="display:none;">
+      <label>Ask the campus assistant</label>
+      <input type="text" id="assistantPrompt" placeholder="What events are happening this week?">
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" id="askAssistantBtn">Ask</button>
+    </div>
+
+    <div id="resultBox" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;">
+      <h4>Result (review before using)</h4>
+      <div id="resultContent"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+const TOOLS = ["text","image","sticker","meme","assistant"];
+document.querySelectorAll(".chip[data-tool]").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".chip[data-tool]").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    TOOLS.forEach(t => document.getElementById(`${t}Tool`).style.display = t === chip.dataset.tool ? "block" : "none");
+    document.getElementById("resultBox").style.display = "none";
+  });
+});
+
+function showResult(html) {
+  document.getElementById("resultBox").style.display = "block";
+  document.getElementById("resultContent").innerHTML = html;
+}
+
+document.getElementById("genTextBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("textPrompt").value.trim();
+  if (!prompt) return showToast("Enter a prompt.");
+  try {
+    const result = await api("/api/ai/text", { method: "POST", body: { prompt, style: document.getElementById("textStyle").value } });
+    showResult(`<p style="font-size:1.05rem;">${escapeHtml(result.text)}</p>
+      <div>${(result.hashtags||[]).map(h => `<span class="chip" style="margin-right:4px;">${escapeHtml(h)}</span>`).join("")}</div>
+      <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(result.text)});showToast('Copied!')">Copy</button>`);
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("genImageBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("imagePrompt").value.trim();
+  if (!prompt) return showToast("Enter a prompt.");
+  try {
+    const result = await api("/api/ai/image", { method: "POST", body: { prompt } });
+    showResult(`<img src="${result.image_url}" style="max-width:100%;border-radius:12px;">`);
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("genStickerBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("stickerPrompt").value.trim();
+  if (!prompt) return showToast("Enter a prompt.");
+  try {
+    const result = await api("/api/ai/sticker", { method: "POST", body: { prompt } });
+    showResult(`<img src="${result.image_url}" style="max-width:220px;border-radius:12px;">`);
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("genMemeBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("memePrompt").value.trim();
+  if (!prompt) return showToast("Enter a prompt.");
+  try {
+    const result = await api("/api/ai/meme", { method: "POST", body: { prompt } });
+    showResult(`<p style="font-size:1.2rem;font-weight:800;text-align:center;">${escapeHtml(result.text)}</p>`);
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("askAssistantBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("assistantPrompt").value.trim();
+  if (!prompt) return showToast("Ask a question.");
+  try {
+    const result = await api("/api/ai/assistant", { method: "POST", body: { prompt } });
+    showResult(`<p>${escapeHtml(result.answer)}</p><p style="font-size:0.75rem;color:var(--text-faint);">Source: ${escapeHtml(result.source)}${result.note ? " — " + escapeHtml(result.note) : ""}</p>`);
+  } catch (err) { showToast(err.message); }
+});
+</script>
+</body>
+</html>

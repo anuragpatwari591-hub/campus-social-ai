@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stories — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="stories">
+
+<div class="page-shell" style="max-width:640px;">
+  <h2>📸 Stories <span style="font-size:0.7rem; color:var(--text-faint); font-weight:400;">(disappear after 24h)</span></h2>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div class="tabs">
+      <div class="tab active" data-type="text">Text</div>
+      <div class="tab" data-type="image">Image</div>
+    </div>
+    <div id="textStoryFields">
+      <textarea id="storyText" rows="2" placeholder="Share a quick update..."></textarea>
+      <button class="btn btn-secondary btn-sm" id="aiStoryBtn" type="button" style="margin-top:8px;">✨ AI Story Assistant</button>
+    </div>
+    <div id="imageStoryFields" style="display:none;">
+      <input type="file" id="storyImage" accept="image/*">
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:12px;" id="publishStory">Publish Story</button>
+  </div>
+
+  <div id="storiesGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:12px;"></div>
+</div>
+
+<!-- Fullscreen viewer -->
+<div id="viewer" style="display:none; position:fixed; inset:0; background:#000; z-index:200; align-items:center; justify-content:center; flex-direction:column;">
+  <div id="viewerContent" style="max-width:400px; width:100%; padding:20px; text-align:center; color:white;"></div>
+  <button class="btn btn-secondary" style="position:absolute; top:20px; right:20px;" onclick="closeViewer()">✕ Close</button>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let storyType = "text";
+document.querySelectorAll(".tab[data-type]").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab[data-type]").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    storyType = tab.dataset.type;
+    document.getElementById("textStoryFields").style.display = storyType === "text" ? "block" : "none";
+    document.getElementById("imageStoryFields").style.display = storyType === "image" ? "block" : "none";
+  });
+});
+
+document.getElementById("aiStoryBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("storyText").value.trim() || "college fest tomorrow";
+  try {
+    const result = await api("/api/ai/text", { method: "POST", body: { prompt, style: "genz", context: "story" } });
+    document.getElementById("storyText").value = result.text;
+    showToast("AI story text generated — edit before posting!");
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("publishStory").addEventListener("click", async () => {
+  try {
+    let payload = { story_type: storyType };
+    if (storyType === "text") {
+      const text = document.getElementById("storyText").value.trim();
+      if (!text) return showToast("Write something first.");
+      payload.text_content = text;
+    } else {
+      const fileInput = document.getElementById("storyImage");
+      if (!fileInput.files.length) return showToast("Choose an image first.");
+      const form = new FormData();
+      form.append("file", fileInput.files[0]);
+      const upload = await api("/api/uploads/image", { method: "POST", body: form, isForm: true });
+      payload.media_url = upload.url;
+    }
+    await api("/api/stories", { method: "POST", body: payload });
+    showToast("Story published! Visible for 24 hours.");
+    document.getElementById("storyText").value = "";
+    loadStories();
+  } catch (err) { showToast(err.message); }
+});
+
+function storyTileHtml(s) {
+  const preview = s.story_type === "image" && s.media_url
+    ? `<img src="${API_BASE}${s.media_url}" style="width:100%;height:140px;object-fit:cover;border-radius:12px;">`
+    : `<div style="width:100%;height:140px;border-radius:12px;background:var(--gradient);display:flex;align-items:center;justify-content:center;padding:10px;text-align:center;font-size:0.8rem;font-weight:700;">${escapeHtml((s.text_content || "").slice(0, 60))}</div>`;
+  return `<div class="card" style="padding:8px;cursor:pointer;" onclick='openViewer(${JSON.stringify(s).replace(/'/g, "&apos;")})'>
+    ${preview}
+    <div style="font-size:0.75rem;margin-top:6px;color:var(--text-dim);">@${escapeHtml(s.author_username)} · 👁 ${s.view_count}</div>
+  </div>`;
+}
+
+function openViewer(story) {
+  document.getElementById("viewer").style.display = "flex";
+  const content = document.getElementById("viewerContent");
+  content.innerHTML = story.story_type === "image" && story.media_url
+    ? `<img src="${API_BASE}${story.media_url}" style="max-width:100%;border-radius:12px;"><div style="margin-top:12px;">@${escapeHtml(story.author_username)}</div>`
+    : `<div style="font-size:1.4rem;font-weight:700;padding:30px;background:var(--gradient);border-radius:16px;">${escapeHtml(story.text_content || "")}</div><div style="margin-top:12px;">@${escapeHtml(story.author_username)}</div>`;
+  api(`/api/stories/${story.id}/view`, { method: "POST" }).catch(() => {});
+}
+function closeViewer() { document.getElementById("viewer").style.display = "none"; }
+
+async function loadStories() {
+  try {
+    const stories = await api("/api/stories");
+    document.getElementById("storiesGrid").innerHTML = stories.length
+      ? stories.map(storyTileHtml).join("")
+      : `<div class="empty-state" style="grid-column:1/-1;"><div class="icon">📷</div>No active stories right now.</div>`;
+  } catch (err) { showToast(err.message); }
+}
+loadStories();
+</script>
+</body>
+</html>

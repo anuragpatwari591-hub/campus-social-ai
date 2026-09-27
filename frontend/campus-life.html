@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus Life — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="events">
+
+<div class="page-shell">
+  <h2>🎉 Campus Life</h2>
+  <div class="tabs">
+    <div class="tab active" data-tab="events">Events</div>
+    <div class="tab" data-tab="opportunities">Opportunities</div>
+    <div class="tab" data-tab="marketplace">Marketplace</div>
+  </div>
+
+  <!-- Events -->
+  <div id="panel-events">
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <input type="text" id="evTitle" placeholder="Event title">
+        <select id="evCategory">
+          <option value="fest">Fest</option><option value="hackathon">Hackathon</option>
+          <option value="workshop">Workshop</option><option value="seminar">Seminar</option><option value="general">General</option>
+        </select>
+        <input type="text" id="evLocation" placeholder="Location">
+        <input type="datetime-local" id="evStart">
+      </div>
+      <textarea id="evDesc" placeholder="Description" rows="2" style="margin-top:10px;"></textarea>
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" id="createEventBtn">Create Event</button>
+    </div>
+    <div id="eventsGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap:14px;"></div>
+  </div>
+
+  <!-- Opportunities -->
+  <div id="panel-opportunities" style="display:none;">
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <input type="text" id="opTitle" placeholder="Title (e.g. Frontend Intern)">
+        <select id="opType">
+          <option value="internship">Internship</option><option value="job">Job</option>
+          <option value="hackathon">Hackathon</option><option value="scholarship">Scholarship</option>
+        </select>
+        <input type="text" id="opOrg" placeholder="Organization">
+        <input type="text" id="opUrl" placeholder="Apply URL">
+      </div>
+      <textarea id="opDesc" placeholder="Description" rows="2" style="margin-top:10px;"></textarea>
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" id="createOppBtn">Post Opportunity</button>
+    </div>
+    <div id="oppGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap:14px;"></div>
+  </div>
+
+  <!-- Marketplace -->
+  <div id="panel-marketplace" style="display:none;">
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <input type="text" id="mkTitle" placeholder="Item title">
+        <select id="mkCategory">
+          <option value="books">Books</option><option value="electronics">Electronics</option>
+          <option value="cycle">Cycle</option><option value="hostel">Hostel Items</option><option value="other">Other</option>
+        </select>
+        <input type="number" id="mkPrice" placeholder="Price (₹)" min="0">
+        <input type="file" id="mkImage" accept="image/*">
+      </div>
+      <textarea id="mkDesc" placeholder="Description" rows="2" style="margin-top:10px;"></textarea>
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" id="createListingBtn">List Item</button>
+    </div>
+    <div id="mkGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:14px;"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+document.querySelectorAll(".tab[data-tab]").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab[data-tab]").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    ["events","opportunities","marketplace"].forEach(p => document.getElementById(`panel-${p}`).style.display = p === tab.dataset.tab ? "block" : "none");
+  });
+});
+
+// --- Events ---
+document.getElementById("createEventBtn").addEventListener("click", async () => {
+  const title = document.getElementById("evTitle").value.trim();
+  const starts = document.getElementById("evStart").value;
+  if (!title || !starts) return showToast("Title and start time are required.");
+  try {
+    await api("/api/events", { method: "POST", body: {
+      title, description: document.getElementById("evDesc").value, category: document.getElementById("evCategory").value,
+      location: document.getElementById("evLocation").value, starts_at: new Date(starts).toISOString(),
+    }});
+    showToast("Event created!");
+    loadEvents();
+  } catch (err) { showToast(err.message); }
+});
+
+async function loadEvents() {
+  const events = await api("/api/events");
+  document.getElementById("eventsGrid").innerHTML = events.length ? events.map(e => `
+    <div class="card">
+      <div class="category-badge" style="margin-bottom:8px;">${escapeHtml(e.category)}</div>
+      <h3>${escapeHtml(e.title)}</h3>
+      <p style="font-size:0.85rem;">${escapeHtml(e.description || "")}</p>
+      <p style="font-size:0.78rem; color:var(--text-faint);">📍 ${escapeHtml(e.location || "TBA")} · ${new Date(e.starts_at).toLocaleString()}</p>
+      <button class="btn btn-secondary btn-sm btn-block" data-ev="${e.id}">${e.is_registered ? "Registered ✓" : `Register (${e.registration_count})`}</button>
+    </div>`).join("") : `<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🎉</div>No events yet.</div>`;
+  document.querySelectorAll("[data-ev]").forEach(btn => btn.addEventListener("click", async () => {
+    await api(`/api/events/${btn.dataset.ev}/register`, { method: "POST" });
+    loadEvents();
+  }));
+}
+
+// --- Opportunities ---
+document.getElementById("createOppBtn").addEventListener("click", async () => {
+  const title = document.getElementById("opTitle").value.trim();
+  if (!title) return showToast("Title is required.");
+  try {
+    await api("/api/opportunities", { method: "POST", body: {
+      title, description: document.getElementById("opDesc").value, opportunity_type: document.getElementById("opType").value,
+      organization: document.getElementById("opOrg").value, apply_url: document.getElementById("opUrl").value,
+    }});
+    showToast("Opportunity posted!");
+    loadOpportunities();
+  } catch (err) { showToast(err.message); }
+});
+
+async function loadOpportunities() {
+  const opps = await api("/api/opportunities");
+  document.getElementById("oppGrid").innerHTML = opps.length ? opps.map(o => `
+    <div class="card">
+      <div class="category-badge" style="margin-bottom:8px;">${escapeHtml(o.opportunity_type)}</div>
+      <h3>${escapeHtml(o.title)}</h3>
+      <p style="font-size:0.85rem;">${escapeHtml(o.organization || "")}</p>
+      <p style="font-size:0.85rem;">${escapeHtml(o.description || "")}</p>
+      ${o.apply_url ? `<a href="${escapeHtml(o.apply_url)}" target="_blank" class="btn btn-secondary btn-sm btn-block">Apply</a>` : ""}
+    </div>`).join("") : `<div class="empty-state" style="grid-column:1/-1;"><div class="icon">💼</div>No opportunities posted yet.</div>`;
+}
+
+// --- Marketplace ---
+document.getElementById("createListingBtn").addEventListener("click", async () => {
+  const title = document.getElementById("mkTitle").value.trim();
+  if (!title) return showToast("Title is required.");
+  try {
+    let imageUrl = null;
+    const fileInput = document.getElementById("mkImage");
+    if (fileInput.files.length) {
+      const form = new FormData();
+      form.append("file", fileInput.files[0]);
+      const upload = await api("/api/uploads/image", { method: "POST", body: form, isForm: true });
+      imageUrl = upload.url;
+    }
+    await api("/api/marketplace", { method: "POST", body: {
+      title, description: document.getElementById("mkDesc").value, category: document.getElementById("mkCategory").value,
+      price: parseFloat(document.getElementById("mkPrice").value) || 0, image_url: imageUrl,
+    }});
+    showToast("Listed!");
+    loadMarketplace();
+  } catch (err) { showToast(err.message); }
+});
+
+async function loadMarketplace() {
+  const listings = await api("/api/marketplace");
+  document.getElementById("mkGrid").innerHTML = listings.length ? listings.map(l => `
+    <div class="card">
+      ${l.image_url ? `<img src="${API_BASE}${l.image_url}" style="width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:8px;">` : ""}
+      <h3 style="font-size:1rem;">${escapeHtml(l.title)}</h3>
+      <p style="font-size:0.85rem;">${escapeHtml(l.description || "")}</p>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <b>₹${l.price}</b>
+        <span style="font-size:0.75rem; color:var(--text-faint);">@${escapeHtml(l.seller_username)}</span>
+      </div>
+    </div>`).join("") : `<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🛍️</div>No listings yet.</div>`;
+}
+
+loadEvents();
+loadOpportunities();
+loadMarketplace();
+</script>
+</body>
+</html>

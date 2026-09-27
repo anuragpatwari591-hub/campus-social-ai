@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="campus">
+
+<div class="page-shell">
+  <div class="card" id="campusHeader" style="margin-bottom:20px;">Loading campus...</div>
+  <div id="statsGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap:12px; margin-bottom:24px;"></div>
+
+  <h3>Recent posts from this campus</h3>
+  <div id="feed"></div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/feed.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const campusId = params.get("id") || Auth.getUser()?.campus_id;
+
+async function load() {
+  if (!campusId) {
+    document.getElementById("campusHeader").innerHTML = "No campus selected. Set one from your Profile.";
+    return;
+  }
+  try {
+    const campus = await api(`/api/campus/${campusId}`);
+    document.getElementById("campusHeader").innerHTML = `
+      <h2>${escapeHtml(campus.institution_name)} ${campus.is_verified ? "✅" : ""}</h2>
+      <p>${escapeHtml(campus.city)}, ${escapeHtml(campus.country)}</p>
+      <p style="font-size:0.85rem;">${escapeHtml(campus.description || "")}</p>`;
+    document.getElementById("statsGrid").innerHTML = `
+      <div class="card stat-tile"><div class="value">${campus.member_count}</div><div class="label">Members</div></div>
+      <div class="card stat-tile"><div class="value">${campus.post_count}</div><div class="label">Posts</div></div>
+      <div class="card stat-tile"><div class="value">${campus.reel_count}</div><div class="label">Reels</div></div>
+      <div class="card stat-tile"><div class="value">${campus.community_count}</div><div class="label">Communities</div></div>`;
+
+    const posts = await api(`/api/posts?campus_id=${campusId}&limit=15`);
+    document.getElementById("feed").innerHTML = posts.length
+      ? posts.map(postCardHtml).join("")
+      : `<div class="empty-state"><div class="icon">📭</div>No posts from this campus yet.</div>`;
+    wireCardEvents(document.getElementById("feed"));
+  } catch (err) { showToast(err.message); }
+}
+window.reloadFeedCallback = load;
+load();
+</script>
+</body>
+</html>

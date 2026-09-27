@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join your campus — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-nav="false">
+
+<div class="center-form card fade-in">
+  <h2>Create your account</h2>
+  <p style="margin-bottom:18px;">Choose your college and get a private anonymous persona automatically.</p>
+
+  <form id="registerForm">
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="fullName" required>
+    </div>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="letters, numbers, underscore" required>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="email" required>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="8+ chars, letters & numbers" required>
+    </div>
+    <div class="field" style="position:relative;">
+      <label>Your college</label>
+      <input type="text" id="collegeSearch" placeholder="Search: IIT KGP, Stanford, IEM...">
+      <div id="collegeResults" class="auth-suggestion" style="display:none;"></div>
+      <input type="hidden" id="campusId">
+      <div id="collegeSelected" style="margin-top:6px; font-size:0.82rem; color: var(--accent-3);"></div>
+    </div>
+    <div class="field">
+      <label>Interests (comma separated)</label>
+      <input type="text" id="interests" placeholder="coding, music, gaming">
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:20px;" type="submit">Enter Campus →</button>
+  </form>
+  <p style="text-align:center; margin-top:16px;">Already have an account? <a href="login.html" class="gradient-text" style="font-weight:700;">Log in</a></p>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+let searchTimer;
+document.getElementById("collegeSearch").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  const box = document.getElementById("collegeResults");
+  if (q.length < 2) { box.style.display = "none"; return; }
+  searchTimer = setTimeout(async () => {
+    try {
+      const results = await api(`/api/colleges/search?q=${encodeURIComponent(q)}`);
+      if (!results.length) { box.style.display = "none"; return; }
+      box.innerHTML = results.map(r => `<div data-id="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)} <span style="color:var(--text-faint);">— ${escapeHtml(r.city)}, ${escapeHtml(r.country)}</span></div>`).join("");
+      box.style.display = "block";
+      box.querySelectorAll("div").forEach(div => {
+        div.addEventListener("click", async () => {
+          const instId = div.dataset.id;
+          const name = div.dataset.name;
+          document.getElementById("collegeSearch").value = name;
+          box.style.display = "none";
+          const inst = await api(`/api/colleges/${instId}`);
+          const campus = inst.campuses[0];
+          document.getElementById("campusId").value = campus ? campus.id : "";
+          document.getElementById("collegeSelected").textContent = `Selected campus: ${campus ? campus.name : name}`;
+        });
+      });
+    } catch { box.style.display = "none"; }
+  }, 250);
+});
+
+document.getElementById("registerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const interests = document.getElementById("interests").value.split(",").map(s => s.trim()).filter(Boolean);
+  const payload = {
+    full_name: document.getElementById("fullName").value,
+    username: document.getElementById("username").value,
+    email: document.getElementById("email").value,
+    password: document.getElementById("password").value,
+    campus_id: document.getElementById("campusId").value ? parseInt(document.getElementById("campusId").value) : null,
+    interests,
+  };
+  try {
+    const data = await api("/api/auth/register", { method: "POST", body: payload });
+    Auth.setSession(data.access_token, data.user);
+    window.location.href = "home.html";
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reels — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="reels">
+
+<div class="page-shell" style="max-width:480px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2 style="margin:0;">🎥 Reels</h2>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('createBox').classList.toggle('hidden-box')">+ New Reel</button>
+  </div>
+
+  <div id="createBox" class="card hidden-box" style="margin-bottom:18px;">
+    <label>Video file</label>
+    <input type="file" id="videoFile" accept="video/*">
+    <label>Caption</label>
+    <input type="text" id="caption" placeholder="What's this reel about?">
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <button class="btn btn-secondary btn-sm" id="aiHookBtn" type="button">✨ AI Hook & Hashtags</button>
+    </div>
+    <label>Category</label>
+    <select id="category">
+      <option value="campus">Campus</option><option value="comedy">Comedy</option><option value="memes">Memes</option>
+      <option value="dance">Dance</option><option value="music">Music</option><option value="gaming">Gaming</option>
+      <option value="sports">Sports</option><option value="food">Food</option><option value="fashion">Fashion</option>
+      <option value="study">Study</option><option value="coding">Coding</option><option value="college_fest">College Fest</option>
+      <option value="student_life">Student Life</option>
+    </select>
+    <label>Hashtags</label>
+    <input type="text" id="hashtags" placeholder="#CampusLife #Reels">
+    <button class="btn btn-primary btn-block" style="margin-top:14px;" id="publishReel">Publish Reel</button>
+  </div>
+
+  <div id="categoryChips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;">
+    <span class="chip active" data-cat="">All</span>
+    <span class="chip" data-cat="campus">Campus</span>
+    <span class="chip" data-cat="comedy">Comedy</span>
+    <span class="chip" data-cat="coding">Coding</span>
+    <span class="chip" data-cat="student_life">Student Life</span>
+  </div>
+
+  <div id="reelsFeed" class="reels-feed"></div>
+</div>
+
+<style>.hidden-box { display: none; }</style>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let activeCategory = "";
+
+document.getElementById("categoryChips").addEventListener("click", (e) => {
+  if (!e.target.classList.contains("chip")) return;
+  document.querySelectorAll("#categoryChips .chip").forEach(c => c.classList.remove("active"));
+  e.target.classList.add("active");
+  activeCategory = e.target.dataset.cat;
+  loadReels();
+});
+
+document.getElementById("aiHookBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("caption").value.trim() || "campus reel";
+  try {
+    const result = await api("/api/ai/text", { method: "POST", body: { prompt, style: "genz", context: "reel_hook" } });
+    document.getElementById("caption").value = result.text;
+    if (result.hashtags?.length) document.getElementById("hashtags").value = result.hashtags.join(" ");
+    showToast("AI suggestions added — review before publishing!");
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("publishReel").addEventListener("click", async () => {
+  const fileInput = document.getElementById("videoFile");
+  if (!fileInput.files.length) return showToast("Choose a video file first.");
+  try {
+    const form = new FormData();
+    form.append("file", fileInput.files[0]);
+    const upload = await api("/api/uploads/video", { method: "POST", body: form, isForm: true });
+    await api("/api/reels", { method: "POST", body: {
+      video_url: upload.url,
+      caption: document.getElementById("caption").value,
+      category: document.getElementById("category").value,
+      hashtags: document.getElementById("hashtags").value,
+    }});
+    showToast("Reel published!");
+    document.getElementById("createBox").classList.add("hidden-box");
+    loadReels();
+  } catch (err) { showToast(err.message); }
+});
+
+function reelCardHtml(reel) {
+  return `<div class="reel-card">
+    <video src="${API_BASE}${reel.video_url}" controls loop muted playsinline></video>
+    <div class="reel-overlay">
+      <div style="font-weight:700; margin-bottom:4px;">@${escapeHtml(reel.author.display_name)}</div>
+      <div class="reel-caption">${escapeHtml(reel.caption || "")}</div>
+      <div class="reel-hashtags">${escapeHtml(reel.hashtags || "")}</div>
+      <div style="margin-top:8px; display:flex; gap:14px; font-size:0.8rem;">
+        <span>❤️ ${reel.reaction_count}</span><span>💬 ${reel.comment_count}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function loadReels() {
+  const params = new URLSearchParams();
+  if (activeCategory) params.set("category", activeCategory);
+  try {
+    const reels = await api(`/api/reels?${params.toString()}`);
+    document.getElementById("reelsFeed").innerHTML = reels.length
+      ? reels.map(reelCardHtml).join("")
+      : `<div class="empty-state"><div class="icon">🎬</div>No reels yet in this category.</div>`;
+  } catch (err) { showToast(err.message); }
+}
+
+loadReels();
+</script>
+</body>
+</html>

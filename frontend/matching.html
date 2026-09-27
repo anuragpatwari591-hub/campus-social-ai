@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matching — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="matching">
+
+<div class="page-shell" style="max-width:520px;">
+  <h2>❤️ Find your people</h2>
+  <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:20px;">
+    <span class="chip active" data-mode="friendship">Friendship</span>
+    <span class="chip" data-mode="study_buddy">Study Buddy</span>
+    <span class="chip" data-mode="gaming">Gaming</span>
+    <span class="chip" data-mode="sports">Sports</span>
+    <span class="chip" data-mode="networking">Networking</span>
+    <span class="chip" data-mode="collaboration">Collaboration</span>
+  </div>
+
+  <div id="candidateArea"></div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let mode = "friendship";
+let candidates = [];
+let idx = 0;
+
+document.querySelectorAll(".chip[data-mode]").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".chip[data-mode]").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    mode = chip.dataset.mode;
+    loadCandidates();
+  });
+});
+
+function renderCandidate() {
+  const area = document.getElementById("candidateArea");
+  if (idx >= candidates.length) {
+    area.innerHTML = `<div class="empty-state fade-in"><div class="icon">🔍</div>No more candidates right now. Try another mode or check back later.</div>`;
+    return;
+  }
+  const c = candidates[idx];
+  const breakdown = c.score_breakdown;
+  area.innerHTML = `
+    <div class="card fade-in" style="text-align:center;">
+      <div class="avatar" style="width:70px;height:70px;font-size:1.6rem;margin:0 auto 12px;">${initials(c.full_name)}</div>
+      <h3>${escapeHtml(c.full_name)}</h3>
+      <p style="margin-bottom:12px;">@${escapeHtml(c.username)} ${c.bio ? "· " + escapeHtml(c.bio) : ""}</p>
+      <div class="match-score">${c.score_percent}%</div>
+      <p style="font-size:0.8rem;">Match score</p>
+      <div style="text-align:left; font-size:0.78rem; color:var(--text-dim); background:var(--bg-elevated); border-radius:10px; padding:12px; margin:12px 0;">
+        <div>Interest similarity: ${(breakdown.interest_similarity*100).toFixed(0)}%</div>
+        <div>Same campus: ${(breakdown.college_similarity*100).toFixed(0)}%</div>
+        <div>Shared communities: ${(breakdown.community_similarity*100).toFixed(0)}%</div>
+        <div>Activity similarity: ${(breakdown.activity_similarity*100).toFixed(0)}%</div>
+      </div>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button class="btn btn-secondary" id="skipBtn">Skip</button>
+        <button class="btn btn-primary" id="connectBtn">Connect</button>
+        <button class="btn btn-ghost btn-sm" id="reportBtn">🚩</button>
+      </div>
+    </div>`;
+
+  document.getElementById("skipBtn").addEventListener("click", () => decide(c.match_id, "skip"));
+  document.getElementById("connectBtn").addEventListener("click", () => decide(c.match_id, "connect"));
+  document.getElementById("reportBtn").addEventListener("click", () => decide(c.match_id, "report"));
+}
+
+async function decide(matchId, decision) {
+  try {
+    await api(`/api/matching/${matchId}/decision`, { method: "POST", body: { decision } });
+    if (decision === "connect") showToast("Connection request sent!");
+    idx++;
+    renderCandidate();
+  } catch (err) { showToast(err.message); }
+}
+
+async function loadCandidates() {
+  document.getElementById("candidateArea").innerHTML = `<p style="text-align:center;">Finding matches...</p>`;
+  try {
+    candidates = await api(`/api/matching/candidates?mode=${mode}&limit=10`);
+    idx = 0;
+    renderCandidate();
+  } catch (err) {
+    document.getElementById("candidateArea").innerHTML = `<div class="empty-state"><div class="icon">🔒</div>${escapeHtml(err.message)}</div>`;
+  }
+}
+
+loadCandidates();
+</script>
+</body>
+</html>

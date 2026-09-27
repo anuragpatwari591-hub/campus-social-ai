@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log in — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-nav="false">
+
+<div class="center-form card fade-in">
+  <h2>Welcome back</h2>
+  <p style="margin-bottom:18px;">Log in to your campus community.</p>
+  <form id="loginForm">
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="email" required>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="password" required>
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:20px;" type="submit">Log in</button>
+  </form>
+  <p style="text-align:center; margin-top:16px;">New here? <a href="register.html" class="gradient-text" style="font-weight:700;">Create an account</a></p>
+  <div class="card" style="margin-top:20px; background: var(--bg-elevated); font-size: 0.78rem; color: var(--text-faint);">
+    Demo accounts: <br>
+    admin@campus.ai / Admin12345 (Admin)<br>
+    mod@campus.ai / Moderate123 (Moderator)<br>
+    aarav@campus.ai / Student123 (Student)
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const data = await api("/api/auth/login", {
+      method: "POST",
+      body: { email: document.getElementById("email").value, password: document.getElementById("password").value },
+    });
+    Auth.setSession(data.access_token, data.user);
+    window.location.href = "home.html";
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Messages — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="messages">
+
+<div class="page-shell two-col">
+  <div>
+    <h2>✉️ Messages</h2>
+    <div class="card" style="margin-bottom:14px;">
+      <label>Start a new chat (enter username)</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="newChatUsername" placeholder="username">
+        <button class="btn btn-primary btn-sm" id="startChatBtn">Go</button>
+      </div>
+    </div>
+    <div id="conversationsList"></div>
+  </div>
+
+  <div class="card" id="chatPanel" style="display:none; height:fit-content;">
+    <h3 id="chatWithLabel"></h3>
+    <div id="messagesList" style="max-height:360px; overflow-y:auto; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="msgInput" placeholder="Type a message...">
+      <button class="btn btn-primary" id="sendMsgBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let activeConversationId = null;
+let pollTimer = null;
+
+async function loadConversations() {
+  try {
+    const convs = await api("/api/messages/conversations");
+    document.getElementById("conversationsList").innerHTML = convs.length ? convs.map(c => `
+      <div class="card interactive fade-in" style="margin-bottom:8px; cursor:pointer;" data-id="${c.id}" data-user="${escapeHtml(c.other_participant_username || 'Group')}">
+        <b>${escapeHtml(c.other_participant_username || c.title || "Group chat")}</b>
+        <p style="font-size:0.82rem; margin:2px 0 0;">${escapeHtml(c.last_message || "No messages yet")}</p>
+      </div>`).join("") : `<div class="empty-state"><div class="icon">✉️</div>No conversations yet.</div>`;
+    document.querySelectorAll("[data-id]").forEach(el => {
+      el.addEventListener("click", () => openConversation(el.dataset.id, el.dataset.user));
+    });
+  } catch (err) { showToast(err.message); }
+}
+
+async function openConversation(convId, label) {
+  activeConversationId = convId;
+  document.getElementById("chatPanel").style.display = "block";
+  document.getElementById("chatWithLabel").textContent = label;
+  await refreshMessages();
+  clearInterval(pollTimer);
+  pollTimer = setInterval(refreshMessages, 4000);
+}
+
+async function refreshMessages() {
+  if (!activeConversationId) return;
+  const me = Auth.getUser();
+  const messages = await api(`/api/messages/conversations/${activeConversationId}`);
+  document.getElementById("messagesList").innerHTML = messages.map(m => `
+    <div style="text-align:${m.sender_id === me.id ? 'right' : 'left'}; margin-bottom:6px;">
+      <span style="display:inline-block; padding:8px 12px; border-radius:14px; background:${m.sender_id === me.id ? 'var(--gradient)' : 'var(--bg-elevated)'}; font-size:0.85rem; max-width:70%;">${escapeHtml(m.text || '')}</span>
+    </div>`).join("") || `<div style="color:var(--text-faint); font-size:0.85rem;">Say hello!</div>`;
+  document.getElementById("messagesList").scrollTop = 999999;
+}
+
+document.getElementById("startChatBtn").addEventListener("click", async () => {
+  const username = document.getElementById("newChatUsername").value.trim();
+  if (!username) return;
+  try {
+    const other = await api(`/api/messages/lookup/${encodeURIComponent(username)}`);
+    await api(`/api/messages/dm/${other.id}`, { method: "POST", body: { text: "👋 Hi!" } });
+    document.getElementById("newChatUsername").value = "";
+    loadConversations();
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("sendMsgBtn").addEventListener("click", async () => {
+  const input = document.getElementById("msgInput");
+  const text = input.value.trim();
+  if (!text || !activeConversationId) return;
+  try {
+    await api(`/api/messages/conversations/${activeConversationId}`, { method: "POST", body: { text } });
+    input.value = "";
+    refreshMessages();
+    loadConversations();
+  } catch (err) { showToast(err.message); }
+});
+
+loadConversations();
+</script>
+</body>
+</html>

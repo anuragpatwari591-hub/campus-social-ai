@@ -1,0 +1,3 @@
+# Convenience pointer: the actual backend dependencies live in backend/requirements.txt
+# (kept there so the backend remains a self-contained Python package).
+-r backend/requirements.txt

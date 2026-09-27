@@ -1,0 +1,30 @@
+# Environments / secrets
+.env
+backend/.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Node (frontend tooling, if any is added later)
+node_modules/
+
+# Uploaded media (user-generated at runtime, not source; directories are created automatically)
+/uploads/
+backend/test_uploads/
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Logs
+*.log

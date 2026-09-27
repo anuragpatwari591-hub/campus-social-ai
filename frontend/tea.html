@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tea — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="tea">
+
+<div class="page-shell" style="max-width:700px;">
+  <h2>☕ Anonymous Tea</h2>
+  <p>Post and browse anonymously — your real identity is never shown.</p>
+
+  <div id="categoryChips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px;">
+    <span class="chip active" data-cat="">All</span>
+  </div>
+
+  <div id="feed"></div>
+  <div style="text-align:center; margin-top:16px;">
+    <button class="btn btn-secondary" id="loadMoreBtn">Load more</button>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/feed.js"></script>
+<script>
+const CATEGORIES = ["trending","funny","confession","relationships","academic","campus","events","food","sports","questions"];
+document.getElementById("categoryChips").insertAdjacentHTML("beforeend",
+  CATEGORIES.map(c => `<span class="chip" data-cat="${c}">${c}</span>`).join(""));
+
+let activeCategory = "";
+let offset = 0;
+const PAGE_SIZE = 15;
+
+document.getElementById("categoryChips").addEventListener("click", (e) => {
+  if (!e.target.classList.contains("chip")) return;
+  document.querySelectorAll("#categoryChips .chip").forEach(c => c.classList.remove("active"));
+  e.target.classList.add("active");
+  activeCategory = e.target.dataset.cat;
+  reload();
+});
+
+async function loadFeedPage() {
+  const params = new URLSearchParams({ limit: PAGE_SIZE, offset, tea_only: "true" });
+  if (activeCategory) params.set("category", activeCategory);
+  try {
+    const posts = await api(`/api/posts?${params.toString()}`);
+    if (posts.length === 0 && offset === 0) {
+      document.getElementById("feed").innerHTML = `<div class="empty-state"><div class="icon">☕</div>No tea yet in this category. Be the first!</div>`;
+      return;
+    }
+    posts.forEach(post => document.getElementById("feed").insertAdjacentHTML("beforeend", postCardHtml(post)));
+    offset += posts.length;
+    wireCardEvents(document.getElementById("feed"));
+  } catch (err) { showToast(err.message); }
+}
+
+function reload() { offset = 0; document.getElementById("feed").innerHTML = ""; loadFeedPage(); }
+window.reloadFeedCallback = reload;
+document.getElementById("loadMoreBtn").addEventListener("click", loadFeedPage);
+reload();
+</script>
+</body>
+</html>

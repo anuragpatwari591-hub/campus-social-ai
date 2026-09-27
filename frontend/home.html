@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="home">
+
+<div class="page-shell">
+  <div class="two-col">
+    <div>
+      <!-- Stories bar -->
+      <div id="storiesBar" class="stories-bar"></div>
+
+      <!-- Composer -->
+      <div class="card fade-in" style="margin-bottom:18px;">
+        <div class="tabs" style="margin-bottom:12px;">
+          <div class="tab active" data-mode="normal">Post</div>
+          <div class="tab" data-mode="anonymous">Anonymous Tea ☕</div>
+        </div>
+        <textarea id="postText" rows="3" placeholder="What's happening on campus?"></textarea>
+        <div id="categoryRow" style="display:none; margin-top:10px; flex-wrap:wrap; gap:6px;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+          <label style="display:flex; align-items:center; gap:6px; margin:0;">
+            <input type="checkbox" id="addPoll" style="width:auto;"> Add a poll
+          </label>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary btn-sm" id="aiAssistBtn" type="button">✨ AI Caption</button>
+            <button class="btn btn-primary btn-sm" id="submitPost" type="button">Post</button>
+          </div>
+        </div>
+        <div id="pollBuilder" style="display:none; margin-top:12px;">
+          <input type="text" id="pollQuestion" placeholder="Poll question">
+          <input type="text" id="pollOpt1" placeholder="Option 1" style="margin-top:6px;">
+          <input type="text" id="pollOpt2" placeholder="Option 2" style="margin-top:6px;">
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-feed="all">All</div>
+        <div class="tab" data-feed="tea">Tea Only</div>
+      </div>
+
+      <div id="feed"></div>
+      <div style="text-align:center; margin-top:16px;">
+        <button class="btn btn-secondary" id="loadMoreBtn">Load more</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <h3>🎓 Your Campus</h3>
+        <p id="campusInfo">Loading...</p>
+        <a id="campusLink" class="btn btn-secondary btn-sm btn-block">Visit Campus Page</a>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <h3>🎉 Upcoming Events</h3>
+        <div id="eventsWidget"></div>
+      </div>
+      <div class="card">
+        <h3>👥 Communities to join</h3>
+        <div id="communitiesWidget"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/feed.js"></script>
+<script>
+const CATEGORIES = ["trending","funny","confession","relationships","academic","campus","events","food","sports","questions"];
+let composeMode = "normal";
+let selectedCategory = null;
+let feedFilter = "all";
+let offset = 0;
+const PAGE_SIZE = 10;
+
+function categoryChipsHtml() {
+  return CATEGORIES.map(c => `<span class="chip" data-cat="${c}">${c}</span>`).join("");
+}
+document.getElementById("categoryRow").innerHTML = categoryChipsHtml();
+document.getElementById("categoryRow").style.display = "none";
+document.getElementById("categoryRow").style.flexWrap = "wrap";
+
+document.querySelectorAll(".tab[data-mode]").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab[data-mode]").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    composeMode = tab.dataset.mode;
+    document.getElementById("categoryRow").style.display = composeMode === "anonymous" ? "flex" : "none";
+  });
+});
+
+document.getElementById("categoryRow").addEventListener("click", (e) => {
+  if (!e.target.dataset.cat) return;
+  document.querySelectorAll("#categoryRow .chip").forEach(c => c.classList.remove("active"));
+  e.target.classList.add("active");
+  selectedCategory = e.target.dataset.cat;
+});
+
+document.getElementById("addPoll").addEventListener("change", (e) => {
+  document.getElementById("pollBuilder").style.display = e.target.checked ? "block" : "none";
+});
+
+document.getElementById("aiAssistBtn").addEventListener("click", async () => {
+  const prompt = document.getElementById("postText").value.trim() || "campus life today";
+  try {
+    const result = await api("/api/ai/text", { method: "POST", body: { prompt, style: "genz", context: "caption" } });
+    document.getElementById("postText").value = result.text;
+    showToast("AI caption generated — edit before posting!");
+  } catch (err) { showToast(err.message); }
+});
+
+document.getElementById("submitPost").addEventListener("click", async () => {
+  const text = document.getElementById("postText").value.trim();
+  if (!text) return showToast("Write something first!");
+  const payload = { text, is_anonymous: composeMode === "anonymous", category: composeMode === "anonymous" ? selectedCategory : null };
+  if (document.getElementById("addPoll").checked) {
+    const q = document.getElementById("pollQuestion").value.trim();
+    const o1 = document.getElementById("pollOpt1").value.trim();
+    const o2 = document.getElementById("pollOpt2").value.trim();
+    if (q && o1 && o2) payload.poll = { question: q, options: [o1, o2] };
+  }
+  try {
+    await api("/api/posts", { method: "POST", body: payload });
+    document.getElementById("postText").value = "";
+    document.getElementById("addPoll").checked = false;
+    document.getElementById("pollBuilder").style.display = "none";
+    offset = 0;
+    document.getElementById("feed").innerHTML = "";
+    loadFeed();
+    showToast("Posted!");
+  } catch (err) { showToast(err.message); }
+});
+
+document.querySelectorAll(".tab[data-feed]").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab[data-feed]").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    feedFilter = tab.dataset.feed;
+    offset = 0;
+    document.getElementById("feed").innerHTML = "";
+    loadFeed();
+  });
+});
+
+async function loadFeed() {
+  const params = new URLSearchParams({ limit: PAGE_SIZE, offset });
+  if (feedFilter === "tea") params.set("tea_only", "true");
+  try {
+    const posts = await api(`/api/posts?${params.toString()}`);
+    if (posts.length === 0 && offset === 0) {
+      document.getElementById("feed").innerHTML = `<div class="empty-state"><div class="icon">📭</div>No posts yet. Be the first to share!</div>`;
+      return;
+    }
+    posts.forEach(post => {
+      document.getElementById("feed").insertAdjacentHTML("beforeend", postCardHtml(post));
+    });
+    offset += posts.length;
+    wireCardEvents(document.getElementById("feed"));
+  } catch (err) { showToast(err.message); }
+}
+
+window.reloadFeedCallback = () => { offset = 0; document.getElementById("feed").innerHTML = ""; loadFeed(); };
+
+document.getElementById("loadMoreBtn").addEventListener("click", loadFeed);
+
+async function loadSidebar() {
+  const user = Auth.getUser();
+  if (user.campus_id) {
+    try {
+      const campus = await api(`/api/campus/${user.campus_id}`);
+      document.getElementById("campusInfo").textContent = `${campus.institution_name} — ${campus.city}, ${campus.country}`;
+      document.getElementById("campusLink").href = `campus.html?id=${user.campus_id}`;
+    } catch { document.getElementById("campusInfo").textContent = "Not set."; }
+  } else {
+    document.getElementById("campusInfo").textContent = "Add your college in Profile settings.";
+  }
+
+  try {
+    const events = await api(`/api/events${user.campus_id ? `?campus_id=${user.campus_id}` : ""}`);
+    document.getElementById("eventsWidget").innerHTML = events.slice(0, 3).map(e =>
+      `<div style="margin-bottom:10px;"><b style="font-size:0.85rem;">${escapeHtml(e.title)}</b><br><span style="font-size:0.75rem;color:var(--text-faint);">${new Date(e.starts_at).toLocaleDateString()}</span></div>`
+    ).join("") || `<p style="font-size:0.85rem;">No upcoming events.</p>`;
+  } catch {}
+
+  try {
+    const communities = await api(`/api/communities`);
+    document.getElementById("communitiesWidget").innerHTML = communities.slice(0, 4).map(c =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:0.85rem;">${escapeHtml(c.name)}</span><span style="font-size:0.72rem;color:var(--text-faint);">${c.member_count}</span></div>`
+    ).join("") || `<p style="font-size:0.85rem;">No communities yet.</p>`;
+  } catch {}
+}
+
+async function loadStories() {
+  try {
+    const stories = await api("/api/stories");
+    const byAuthor = {};
+    stories.forEach(s => { (byAuthor[s.author_username] ||= []).push(s); });
+    const bar = document.getElementById("storiesBar");
+    bar.innerHTML = `<div class="story-bubble" onclick="window.location.href='stories.html'">
+        <div class="story-ring"><div class="story-ring-inner">+</div></div><span>Add Story</span>
+      </div>` + Object.entries(byAuthor).map(([username, list]) => {
+        const allSeen = list.every(s => s.viewed_by_me);
+        return `<div class="story-bubble" onclick="window.location.href='stories.html'">
+          <div class="story-ring ${allSeen ? 'seen' : ''}"><div class="story-ring-inner">${initials(username)}</div></div>
+          <span>${escapeHtml(username)}</span>
+        </div>`;
+      }).join("");
+  } catch {}
+}
+
+loadFeed();
+loadSidebar();
+loadStories();
+</script>
+</body>
+</html>

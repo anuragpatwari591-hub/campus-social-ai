@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Communities — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="communities">
+
+<div class="page-shell">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2 style="margin:0;">👥 Communities</h2>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('createBox').classList.toggle('hidden-box')">+ Create</button>
+  </div>
+
+  <div id="createBox" class="card hidden-box" style="margin-bottom:18px;">
+    <label>Name</label><input type="text" id="cName">
+    <label>Description</label><input type="text" id="cDesc">
+    <label>Category</label>
+    <select id="cCategory">
+      <option value="coding">Coding</option><option value="gaming">Gaming</option><option value="photography">Photography</option>
+      <option value="cricket">Cricket</option><option value="music">Music</option><option value="startups">Startups</option>
+      <option value="fitness">Fitness</option><option value="study">Study</option><option value="movies">Movies</option>
+      <option value="general">General</option>
+    </select>
+    <button class="btn btn-primary btn-block" style="margin-top:12px;" id="createBtn">Create Community</button>
+  </div>
+
+  <div id="grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap:14px;"></div>
+</div>
+
+<style>.hidden-box { display: none; }</style>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+document.getElementById("createBtn").addEventListener("click", async () => {
+  const name = document.getElementById("cName").value.trim();
+  if (!name) return showToast("Name is required.");
+  try {
+    await api("/api/communities", { method: "POST", body: {
+      name, description: document.getElementById("cDesc").value, category: document.getElementById("cCategory").value,
+    }});
+    document.getElementById("createBox").classList.add("hidden-box");
+    showToast("Community created!");
+    load();
+  } catch (err) { showToast(err.message); }
+});
+
+function cardHtml(c) {
+  return `<div class="card interactive fade-in">
+    <div class="category-badge" style="margin-bottom:8px;">${escapeHtml(c.category)}</div>
+    <h3 style="margin-bottom:4px;">${escapeHtml(c.name)}</h3>
+    <p style="font-size:0.85rem;">${escapeHtml(c.description || "No description yet.")}</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+      <span style="font-size:0.78rem; color:var(--text-faint);">${c.member_count} members</span>
+      <button class="btn ${c.is_member ? 'btn-secondary' : 'btn-primary'} btn-sm" data-id="${c.id}" data-member="${c.is_member}">
+        ${c.is_member ? "Leave" : "Join"}
+      </button>
+    </div>
+  </div>`;
+}
+
+async function load() {
+  try {
+    const communities = await api("/api/communities");
+    document.getElementById("grid").innerHTML = communities.length
+      ? communities.map(cardHtml).join("")
+      : `<div class="empty-state" style="grid-column:1/-1;"><div class="icon">👥</div>No communities yet. Create the first one!</div>`;
+    document.querySelectorAll("[data-member]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const isMember = btn.dataset.member === "true";
+        await api(`/api/communities/${btn.dataset.id}/${isMember ? "leave" : "join"}`, { method: "POST" });
+        load();
+      });
+    });
+  } catch (err) { showToast(err.message); }
+}
+load();
+</script>
+</body>
+</html>

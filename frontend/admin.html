@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — Campus Social AI</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="admin">
+
+<div class="page-shell">
+  <h2>🛡️ Admin & Moderation Dashboard</h2>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="analytics">Analytics</div>
+    <div class="tab" data-tab="reports">Reports Queue</div>
+    <div class="tab" data-tab="users">Users</div>
+    <div class="tab" data-tab="sponsors">Sponsors & Campaigns</div>
+  </div>
+
+  <div id="panel-analytics">
+    <div id="statsGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:12px;"></div>
+  </div>
+
+  <div id="panel-reports" style="display:none;">
+    <div id="reportsList"></div>
+  </div>
+
+  <div id="panel-users" style="display:none;">
+    <div id="usersList"></div>
+  </div>
+
+  <div id="panel-sponsors" style="display:none;">
+    <div class="card" style="margin-bottom:16px;">
+      <label>Sponsor name</label><input type="text" id="spName">
+      <label>Website</label><input type="text" id="spWebsite">
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" id="createSponsorBtn">Add Sponsor</button>
+    </div>
+    <div id="sponsorsList" style="margin-bottom:20px;"></div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <label>Sponsor ID</label><input type="number" id="cmpSponsorId">
+      <label>Campaign title</label><input type="text" id="cmpTitle">
+      <label>Placement</label>
+      <select id="cmpPlacement"><option value="feed">Feed</option><option value="reel">Reel</option><option value="story">Story</option><option value="event">Event</option></select>
+      <label>Demo budget (₹)</label><input type="number" id="cmpBudget">
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" id="createCampaignBtn">Create Campaign</button>
+    </div>
+    <div id="campaignsList"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+document.querySelectorAll(".tab[data-tab]").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab[data-tab]").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    ["analytics","reports","users","sponsors"].forEach(p => document.getElementById(`panel-${p}`).style.display = p === tab.dataset.tab ? "block" : "none");
+  });
+});
+
+async function loadAnalytics() {
+  try {
+    const stats = await api("/api/admin/analytics");
+    document.getElementById("statsGrid").innerHTML = Object.entries(stats).map(([k, v]) =>
+      `<div class="card stat-tile"><div class="value">${v}</div><div class="label">${k.replace(/_/g, " ")}</div></div>`
+    ).join("");
+  } catch (err) { showToast(err.message); }
+}
+
+async function loadReports() {
+  try {
+    const reports = await api("/api/moderation/reports");
+    document.getElementById("reportsList").innerHTML = reports.length ? reports.map(r => `
+      <div class="card" style="margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between;">
+          <b>${escapeHtml(r.target_type)} #${r.target_id} — ${escapeHtml(r.reason)}</b>
+          <span class="category-badge">${escapeHtml(r.status)}</span>
+        </div>
+        <p style="font-size:0.85rem;">${escapeHtml(r.details || "")}</p>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-danger btn-sm" data-action="remove_content" data-report="${r.id}" data-target-type="${r.target_type}" data-target="${r.target_id}">Remove content</button>
+          <button class="btn btn-secondary btn-sm" data-action="dismiss" data-report="${r.id}" data-target-type="${r.target_type}" data-target="${r.target_id}">Dismiss</button>
+        </div>
+      </div>`).join("") : `<div class="empty-state"><div class="icon">✅</div>No pending reports.</div>`;
+    document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async () => {
+      await api("/api/moderation/actions", { method: "POST", body: {
+        report_id: parseInt(btn.dataset.report), action: btn.dataset.action,
+        target_type: btn.dataset.targetType, target_id: parseInt(btn.dataset.target),
+      }});
+      showToast("Action applied.");
+      loadReports();
+    }));
+  } catch (err) { showToast(err.message); }
+}
+
+async function loadUsers() {
+  try {
+    const users = await api("/api/admin/users");
+    document.getElementById("usersList").innerHTML = users.map(u => `
+      <div class="card" style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+        <div><b>${escapeHtml(u.username)}</b> <span style="color:var(--text-faint); font-size:0.8rem;">${escapeHtml(u.email)} · ${u.role}${u.is_suspended ? " · SUSPENDED" : ""}</span></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-secondary btn-sm" data-suspend="${u.id}" data-current="${u.is_suspended}">${u.is_suspended ? "Unsuspend" : "Suspend"}</button>
+        </div>
+      </div>`).join("");
+    document.querySelectorAll("[data-suspend]").forEach(btn => btn.addEventListener("click", async () => {
+      const suspend = btn.dataset.current !== "true";
+      await api(`/api/admin/users/${btn.dataset.suspend}/suspend?suspend=${suspend}`, { method: "POST" });
+      loadUsers();
+    }));
+  } catch (err) { showToast(err.message); }
+}
+
+document.getElementById("createSponsorBtn").addEventListener("click", async () => {
+  const name = document.getElementById("spName").value.trim();
+  if (!name) return;
+  await api("/api/admin/sponsors", { method: "POST", body: { name, website: document.getElementById("spWebsite").value } });
+  loadSponsors();
+});
+
+async function loadSponsors() {
+  const sponsors = await api("/api/admin/sponsors");
+  document.getElementById("sponsorsList").innerHTML = sponsors.map(s => `<div class="chip" style="margin:2px;">#${s.id} ${escapeHtml(s.name)}</div>`).join("") || "<p>No sponsors yet.</p>";
+}
+
+document.getElementById("createCampaignBtn").addEventListener("click", async () => {
+  try {
+    await api("/api/admin/campaigns", { method: "POST", body: {
+      sponsor_id: parseInt(document.getElementById("cmpSponsorId").value),
+      title: document.getElementById("cmpTitle").value,
+      placement: document.getElementById("cmpPlacement").value,
+      budget_demo: parseFloat(document.getElementById("cmpBudget").value) || 0,
+    }});
+    showToast("Campaign created (simulated budget, no real payment).");
+    loadCampaigns();
+  } catch (err) { showToast(err.message); }
+});
+
+async function loadCampaigns() {
+  const campaigns = await api("/api/admin/campaigns");
+  document.getElementById("campaignsList").innerHTML = campaigns.map(c =>
+    `<div class="card" style="margin-bottom:8px;"><b>${escapeHtml(c.title)}</b> · ${escapeHtml(c.placement)} · ₹${c.budget_demo} demo budget · ${c.impressions} impressions</div>`
+  ).join("") || "<p>No campaigns yet.</p>";
+}
+
+loadAnalytics();
+loadReports();
+loadUsers();
+loadSponsors();
+loadCampaigns();
+</script>
+</body>
+</html>
